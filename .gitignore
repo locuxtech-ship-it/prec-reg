@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+*.egg-info/
+.DS_Store
+Thumbs.db
+*.csv
+!prec.csv
+!precursores.csv

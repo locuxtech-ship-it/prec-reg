@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <title>{% if editando %}Editar{% else %}Registrar{% endif %} Actividad Mensual</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .navbar { background: linear-gradient(135deg, #1a237e, #283593) !important; }
+        .navbar-brand { font-weight: 700; }
+        .card-form { border-radius: 16px; border: none; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+        .form-control, .form-select { border-radius: 10px; padding: .6rem 1rem; }
+        .btn-primary { border-radius: 10px; padding: .6rem 2rem; font-weight: 600; }
+        .input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #aaa; z-index: 5; }
+        .form-floating-custom { position: relative; }
+        .form-floating-custom .form-control { padding-left: 2.5rem; }
+        .hint { font-size: .8rem; color: #666; margin-top: .25rem; }
+        .total-display { font-size: 1.2rem; font-weight: 700; }
+        .total-display.ok { color: #2e7d32; }
+        .total-display.warn { color: #f57f17; }
+        .total-display.bad { color: #c62828; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark mb-4">
+    <div class="container">
+        <a href="{{ url_for('index') }}" class="navbar-brand">
+            <i class="bi bi-arrow-left me-2"></i>Dashboard
+        </a>
+        <span class="text-white-50 small">{% if editando %}Editando: {{ editando.nombre }} — {{ editando.mes }}{% else %}Nuevo Registro{% endif %}</span>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card card-form p-4">
+                <h4 class="fw-bold mb-1">
+                    {% if editando %}
+                    <i class="bi bi-pencil-square me-2"></i>Editar Actividad
+                    {% else %}
+                    <i class="bi bi-plus-circle me-2"></i>Registrar Actividad Mensual
+                    {% endif %}
+                </h4>
+                <p class="text-muted small mb-4">Ingresa las horas del precursor para el mes correspondiente.</p>
+
+                {% if error %}
+                <div class="alert alert-danger py-2 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ error }}
+                </div>
+                {% endif %}
+
+                <form method="POST" onsubmit="return validarForm()">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Precursor</label>
+                        <div class="d-flex gap-2">
+                            <select name="nombre" class="form-select" required>
+                                <option value="">Seleccionar...</option>
+                                {% for n in nombres %}
+                                <option value="{{ n }}" {% if editando and editando.nombre == n %}selected{% endif %}>{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                            <a href="{{ url_for('nuevo_precursor') }}" class="btn btn-outline-primary flex-shrink-0" title="Nuevo Precursor">
+                                <i class="bi bi-plus-lg"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mes</label>
+                        <select name="mes" class="form-select" required>
+                            <option value="">Seleccionar...</option>
+                            {% for m in meses %}
+                            <option value="{{ m }}" {% if editando and editando.mes == m %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Horas en el Campo</label>
+                            <input type="number" name="horas" class="form-control" min="0" max="200"
+                                   value="{{ editando.horas if editando else '' }}"
+                                   oninput="calcularTotal()" id="horas-input" placeholder="0">
+                            <div class="hint"><i class="bi bi-info-circle me-1"></i>Horas de predicación</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Servicio Sagrado</label>
+                            <input type="number" name="servicio_sagrado" class="form-control" min="0" max="200"
+                                   value="{{ editando.servicio_sagrado if editando else '' }}"
+                                   oninput="calcularTotal()" id="ss-input" placeholder="0">
+                            <div class="hint"><i class="bi bi-info-circle me-1"></i>Cursos, reuniones, etc.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Resumen</label>
+                        <div class="row g-2 text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <div class="text-muted small">Total Mes</div>
+                                    <div class="total-display" id="total-display">0</div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <div class="text-muted small">Meta</div>
+                                    <div class="total-display text-primary">{{ meta_mensual }}h</div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <div class="text-muted small">Faltante</div>
+                                    <div class="total-display" id="faltante-display">0</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <div class="progress progress-sm">
+                                <div class="progress-bar" id="meta-progress" role="progressbar" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div id="advertencia" class="mt-2 small text-danger d-none">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            <span id="advertencia-texto"></span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi {% if editando %}bi-check-lg{% else %}bi-save{% endif %} me-2"></i>
+                        {% if editando %}Guardar Cambios{% else %}Registrar Actividad{% endif %}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const META = {{ meta_mensual }};
+const MAX = {{ max_total }};
+
+function calcularTotal() {
+    const h = parseInt(document.getElementById('horas-input').value) || 0;
+    const ss = parseInt(document.getElementById('ss-input').value) || 0;
+    const total = h + ss;
+    const tieneSS = ss > 0;
+    const limite = tieneSS ? MAX : 999;
+
+    document.getElementById('total-display').textContent = total;
+    const faltante = total - META;
+    const elFalt = document.getElementById('faltante-display');
+    elFalt.textContent = faltante > 0 ? '+' + faltante : faltante;
+    elFalt.className = 'total-display ' + (faltante >= 0 ? 'ok' : 'bad');
+
+    const pct = Math.min((total / META) * 100, 100);
+    const bar = document.getElementById('meta-progress');
+    bar.className = 'progress-bar ' + (total >= META ? 'bg-success' : '');
+
+    if (tieneSS && total > MAX) {
+        bar.className = 'progress-bar bg-warning';
+    }
+    bar.style.width = Math.min(pct, 100) + '%';
+
+    const adv = document.getElementById('advertencia');
+    const advText = document.getElementById('advertencia-texto');
+    if (tieneSS && total > MAX) {
+        adv.classList.remove('d-none');
+        advText.textContent = 'Al reportar Servicio Sagrado, el total (' + total + 'h) no puede superar las ' + MAX + 'h.';
+    } else if (total === 0) {
+        adv.classList.remove('d-none');
+        advText.textContent = 'Debes ingresar al menos horas en el campo o servicio sagrado.';
+    } else {
+        adv.classList.add('d-none');
+    }
+}
+
+function validarForm() {
+    const h = parseInt(document.getElementById('horas-input').value) || 0;
+    const ss = parseInt(document.getElementById('ss-input').value) || 0;
+    const total = h + ss;
+    const tieneSS = ss > 0;
+    const nombre = document.querySelector('select[name="nombre"]').value;
+    const mes = document.querySelector('select[name="mes"]').value;
+
+    if (!nombre) { alert('Selecciona un precursor.'); return false; }
+    if (!mes) { alert('Selecciona un mes.'); return false; }
+    if (total === 0) { alert('Debes ingresar al menos 1 hora.'); return false; }
+    if (total < META) {
+        if (!confirm('El total de ' + total + 'h está por debajo de la meta de ' + META + 'h. ¿Deseas continuar?')) return false;
+    }
+    if (tieneSS && total > MAX) {
+        alert('Al reportar Servicio Sagrado, el total (' + total + 'h) no puede superar las ' + MAX + 'h.');
+        return false;
+    }
+    return true;
+}
+
+calcularTotal();
+</script>
+</body>
+</html>
