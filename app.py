@@ -246,12 +246,14 @@ def api_precursor(nombre):
             meses_data.append({
                 'mes': m, 'horas': r['horas'],
                 'servicio_sagrado': r['servicio_sagrado'],
-                'total': r['total_mes'], 'faltante': r['faltante_mes']
+                'total': r['total_mes'], 'faltante': r['faltante_mes'],
+                'anio': r['anio']
             })
         else:
             meses_data.append({
                 'mes': m, 'horas': 0, 'servicio_sagrado': 0,
-                'total': 0, 'faltante': -META_MENSUAL
+                'total': 0, 'faltante': -META_MENSUAL,
+                'anio': None
             })
 
     fecha_nombramiento = obtener_fecha_nombramiento(nombre)
