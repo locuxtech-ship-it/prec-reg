@@ -244,6 +244,9 @@
                                 <a href="{{ url_for('editar_fecha_precursor', nombre=p.nombre) }}" class="btn btn-sm btn-outline-secondary" title="Editar nombramiento">
                                     <i class="bi bi-calendar-plus"></i>
                                 </a>
+                                <a href="{{ url_for('generar_token_precursor', nombre=p.nombre) }}" class="btn btn-sm {% if p.tiene_token %}btn-success{% else %}btn-outline-success{% endif %}" title="Generar link de acceso">
+                                    <i class="bi bi-link-45deg"></i>
+                                </a>
                                 {% endif %}
                                 <a href="{{ url_for('reporte_pdf', nombre=p.nombre) }}" class="btn btn-sm btn-outline-danger" title="Descargar PDF" target="_blank">
                                     <i class="bi bi-filetype-pdf"></i>
@@ -288,6 +291,49 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Token Generado -->
+    {% if token_generado and nombre_token %}
+    <div class="modal fade" id="tokenModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#e8f5e9;">
+                    <h6 class="fw-bold mb-0 text-success"><i class="bi bi-check-circle-fill me-2"></i>Link de acceso generado</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2"><strong>{{ nombre_token }}</strong></p>
+                    <p class="text-muted small mb-2">Comparte este link con el precursor para que vea su progreso:</p>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="accessLink" value="{{ url_for('acceso_precursor', token=token_generado, _external=True) }}" readonly style="font-size:.8rem;background:#f5f5f5;" onclick="this.select();">
+                        <button class="btn btn-success" onclick="copiarLink()">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Cada vez que generes un nuevo link, el anterior deja de funcionar.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var m = new bootstrap.Modal(document.getElementById('tokenModal'));
+        m.show();
+    });
+    function copiarLink() {
+        var input = document.getElementById('accessLink');
+        input.select();
+        input.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(input.value);
+        var btn = input.nextElementSibling;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+        setTimeout(function() { btn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 2000);
+    }
+    </script>
+    {% endif %}
 
 </div>
 

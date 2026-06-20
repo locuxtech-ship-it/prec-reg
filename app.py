@@ -1,8 +1,9 @@
 import os
 import csv
+import secrets
 from functools import wraps
 from io import BytesIO
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file, abort
 from datetime import datetime
 from fpdf import FPDF
 
@@ -51,15 +52,19 @@ def cargar_precursores_meta():
             rows.append({
                 'nombre': r['Nombre'].strip(),
                 'fecha_nombramiento': r.get('FechaNombramiento', '').strip(),
+                'token': r.get('Token', '').strip(),
             })
     return rows
 
 def guardar_precursores_meta(rows):
     with open(PRECURSORES_CSV, 'w', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f, delimiter=';')
-        writer.writerow(['Nombre', 'FechaNombramiento'])
+        writer.writerow(['Nombre', 'FechaNombramiento', 'Token'])
         for r in rows:
-            writer.writerow([r['nombre'], r['fecha_nombramiento']])
+            writer.writerow([r['nombre'], r['fecha_nombramiento'], r.get('token', '')])
+
+def generar_token():
+    return secrets.token_urlsafe(16)
 
 def calcular_anios_nombramiento(fecha_str):
     if not fecha_str:
@@ -184,7 +189,9 @@ def index():
     rows = cargar_datos()
     precursores = obtener_precursores(rows)
     nombres = sorted(precursores.keys())
-    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
+    prec_meta_rows = cargar_precursores_meta()
+    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in prec_meta_rows}
+    prec_tokens = {p['nombre']: p['token'] for p in prec_meta_rows}
 
     resumen_global = []
     for nom in nombres:
@@ -211,6 +218,7 @@ def index():
             'anio_servicio': serv_inicio,
             'ultimo_mes': ult_reg['mes'] if ult_reg else '',
             'ultimo_total': ult_reg['total_mes'] if ult_reg else 0,
+            'tiene_token': bool(prec_tokens.get(nom, '')),
         })
 
     resumen_global.sort(key=lambda x: x['progreso_pct'], reverse=True)
@@ -222,7 +230,9 @@ def index():
                          meta_mensual=META_MENSUAL,
                          max_total=MAX_TOTAL,
                          meses=MESES_ORDER,
-                         rol=session.get('rol', 'invitado'))
+                         rol=session.get('rol', 'invitado'),
+                         token_generado=request.args.get('token_generado', ''),
+                         nombre_token=request.args.get('nombre_token', ''))
 
 
 @app.route('/api/precursor/<nombre>')
@@ -391,7 +401,7 @@ def nuevo_precursor():
         meta_rows = cargar_precursores_meta()
         existe = any(r['nombre'] == nombre for r in meta_rows)
         if not existe:
-            meta_rows.append({'nombre': nombre, 'fecha_nombramiento': fecha})
+            meta_rows.append({'nombre': nombre, 'fecha_nombramiento': fecha, 'token': ''})
             guardar_precursores_meta(meta_rows)
         else:
             for r in meta_rows:
@@ -419,13 +429,237 @@ def editar_fecha_precursor(nombre):
         if registro:
             registro['fecha_nombramiento'] = fecha
         else:
-            meta_rows.append({'nombre': nombre, 'fecha_nombramiento': fecha})
+            meta_rows.append({'nombre': nombre, 'fecha_nombramiento': fecha, 'token': ''})
         guardar_precursores_meta(meta_rows)
         return redirect(url_for('index'))
 
     return render_template('nuevo_precursor.html',
                          editando_nombre=nombre,
                          fecha_actual=registro['fecha_nombramiento'] if registro else '')
+
+
+@app.route('/precursor/<nombre>/generar-token')
+@admin_required
+def generar_token_precursor(nombre):
+    meta_rows = cargar_precursores_meta()
+    for r in meta_rows:
+        if r['nombre'] == nombre:
+            r['token'] = generar_token()
+            break
+    guardar_precursores_meta(meta_rows)
+    token = None
+    for r in meta_rows:
+        if r['nombre'] == nombre:
+            token = r['token']
+            break
+    return redirect(url_for('index', token_generado=token, nombre_token=nombre))
+
+
+@app.route('/acceso/<token>')
+def acceso_precursor(token):
+    meta_rows = cargar_precursores_meta()
+    precursor = None
+    for r in meta_rows:
+        if r['token'] == token:
+            precursor = r
+            break
+    if not precursor:
+        abort(404)
+
+    nombre = precursor['nombre']
+    rows = cargar_datos()
+    registros = [r for r in rows if r['nombre'] == nombre]
+    serv_inicio = obtener_servicio_anio_actual(registros)
+    prog = calcular_progreso_anual(registros, serv_inicio)
+
+    registros_anio = sorted(
+        [r for r in registros if servicio_anio_inicio(r['anio'], r['mes']) == serv_inicio],
+        key=lambda x: MESES_ORDER.index(x['mes'])
+    )
+
+    meses_data = []
+    for m in MESES_ORDER:
+        encontrado = [r for r in registros_anio if r['mes'] == m]
+        if encontrado:
+            r2 = encontrado[0]
+            meses_data.append({
+                'mes': m, 'horas': r2['horas'],
+                'servicio_sagrado': r2['servicio_sagrado'],
+                'total': r2['total_mes'], 'faltante': r2['faltante_mes']
+            })
+        else:
+            meses_data.append({
+                'mes': m, 'horas': 0, 'servicio_sagrado': 0,
+                'total': 0, 'faltante': -META_MENSUAL
+            })
+
+    return render_template('precursor_acceso.html',
+                         nombre=nombre,
+                         fecha_nombramiento=precursor['fecha_nombramiento'],
+                         anios_nombramiento=calcular_anios_nombramiento(precursor['fecha_nombramiento']),
+                         anio_servicio=serv_inicio,
+                         progreso=prog,
+                         meses=meses_data,
+                         token=token,
+                         meta_mensual=META_MENSUAL,
+                         meta_anual=META_ANUAL)
+
+
+@app.route('/acceso/<token>/pdf')
+def acceso_precursor_pdf(token):
+    meta_rows = cargar_precursores_meta()
+    precursor = None
+    for r in meta_rows:
+        if r['token'] == token:
+            precursor = r
+            break
+    if not precursor:
+        abort(404)
+
+    nombre = precursor['nombre']
+    rows = cargar_datos()
+    registros = [r for r in rows if r['nombre'] == nombre]
+    serv_inicio = obtener_servicio_anio_actual(registros)
+    prog = calcular_progreso_anual(registros, serv_inicio)
+
+    registros_anio = sorted(
+        [r for r in registros if servicio_anio_inicio(r['anio'], r['mes']) == serv_inicio],
+        key=lambda x: MESES_ORDER.index(x['mes'])
+    )
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    pdf.set_fill_color(26, 35, 126)
+    pdf.rect(0, 0, 210, 38, 'F')
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 16)
+    pdf.set_xy(10, 8)
+    pdf.cell(0, 10, 'Seguimiento Actividad Precursores', align='C')
+    pdf.set_font('Helvetica', '', 11)
+    pdf.set_xy(10, 20)
+    pdf.cell(0, 8, 'Alameda Del Rio', align='C')
+    pdf.set_font('Helvetica', '', 9)
+    pdf.set_xy(10, 30)
+    pdf.cell(0, 6, f'Ano Servicio {serv_inicio+1}', align='C')
+
+    pdf.ln(45)
+    pdf.set_text_color(26, 35, 126)
+    pdf.set_font('Helvetica', 'B', 14)
+    pdf.cell(0, 8, nombre)
+    pdf.ln(2)
+    pdf.set_font('Helvetica', '', 9)
+    pdf.set_text_color(100, 100, 100)
+    if precursor['fecha_nombramiento']:
+        anios = calcular_anios_nombramiento(precursor['fecha_nombramiento'])
+        txt = f'Nombramiento: {precursor["fecha_nombramiento"]}'
+        if anios is not None:
+            txt += f'  ({anios} {"ano" if anios == 1 else "anos"} de nombrado)'
+        pdf.cell(0, 6, txt)
+        pdf.ln(6)
+
+    pdf.ln(5)
+    card_y = pdf.get_y()
+    card_data = [
+        ('Total Horas', str(prog['total_horas']), '26,35,126'),
+        ('Meta', f"{prog['meta_anual']}h", '46,125,50'),
+        ('Faltante', str(prog['faltante']) + 'h', '198,40,40'),
+        ('Prom./Mes', str(prog['promedio_mensual']), '245,124,0'),
+        ('Necesita/mes', str(prog['necesita_por_mes']), '26,35,126'),
+        ('Restan', str(prog['meses_restantes']) + ' meses', '100,100,100'),
+    ]
+    start_x = 10
+    card_w = 30
+    card_h = 22
+    gap = 3
+    total_w = len(card_data) * (card_w + gap) - gap
+    offset = (190 - total_w) / 2
+    for i, (label, value, color) in enumerate(card_data):
+        x = start_x + offset + i * (card_w + gap)
+        y = card_y
+        r, g, b = [int(c) for c in color.split(',')]
+        pdf.set_draw_color(r, g, b)
+        pdf.set_line_width(0.5)
+        pdf.rect(x, y, card_w, card_h)
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(120, 120, 120)
+        pdf.set_xy(x, y + 3)
+        pdf.cell(card_w, 5, label, align='C')
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(r, g, b)
+        pdf.set_xy(x, y + 9)
+        pdf.cell(card_w, 8, value, align='C')
+    pdf.set_y(card_y + card_h + 8)
+
+    bar_y = pdf.get_y()
+    bar_w = 170
+    bar_h = 8
+    pdf.set_fill_color(230, 230, 230)
+    pdf.rect(20, bar_y, bar_w, bar_h, 'F')
+    pct = min(prog['progreso_pct'], 100) / 100
+    if pct > 0:
+        bar_color = (46, 125, 50) if pct >= 0.5 else (245, 124, 0) if pct >= 0.3 else (198, 40, 40)
+        pdf.set_fill_color(*bar_color)
+        pdf.rect(20, bar_y, bar_w * pct, bar_h, 'F')
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 8)
+    pdf.set_xy(20, bar_y + 0.5)
+    pdf.cell(bar_w, bar_h - 1, f'  {prog["progreso_pct"]}%', align='L')
+    pdf.set_text_color(80, 80, 80)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_xy(20, bar_y + bar_h + 1)
+    pdf.cell(bar_w, 4, f'Progreso: {prog["total_horas"]}h de {prog["meta_anual"]}h  |  {prog["meses_completados"]} de 12 meses', align='C')
+    pdf.set_y(bar_y + bar_h + 10)
+
+    pdf.set_fill_color(26, 35, 126)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 9)
+    col_w = [36, 28, 28, 28, 28, 35]
+    headers = ['Mes', 'Horas', 'S. Sagrado', 'Total', '+/- Meta', 'Estado']
+    for i, h in enumerate(headers):
+        pdf.cell(col_w[i], 7, h, border=1, fill=True, align='C')
+    pdf.ln()
+    for row_idx, m in enumerate(MESES_ORDER):
+        encontrado = [r for r in registros_anio if r['mes'] == m]
+        if encontrado:
+            r3 = encontrado[0]
+            h, ss, tot, falt = r3['horas'], r3['servicio_sagrado'], r3['total_mes'], r3['faltante_mes']
+        else:
+            h, ss, tot, falt = 0, 0, 0, -META_MENSUAL
+        hay_registro = encontrado and (h > 0 or ss > 0)
+        status = 'OK' if hay_registro else 'Pendiente'
+        if row_idx % 2 == 0:
+            pdf.set_fill_color(245, 245, 250)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        pdf.set_text_color(50, 50, 50)
+        pdf.set_font('Helvetica', '', 8)
+        pdf.cell(col_w[0], 6, m, border=1, align='C', fill=True)
+        pdf.cell(col_w[1], 6, str(h) if h else '-', border=1, align='C', fill=True)
+        pdf.cell(col_w[2], 6, str(ss) if ss else '-', border=1, align='C', fill=True)
+        pdf.cell(col_w[3], 6, str(tot) if tot else '-', border=1, align='C', fill=True)
+        pdf.set_text_color(46, 125, 50) if falt >= 0 else pdf.set_text_color(198, 40, 40)
+        pdf.cell(col_w[4], 6, f"+{falt}" if falt > 0 else str(falt), border=1, align='C', fill=True)
+        pdf.set_text_color(46, 125, 50) if status == 'OK' else pdf.set_text_color(198, 40, 40)
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.cell(col_w[5], 6, status, border=1, align='C', fill=True)
+        pdf.ln()
+
+    pdf.ln(4)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(26, 35, 126)
+    pdf.cell(0, 7, f'Total acumulado: {prog["total_horas"]}h de {prog["meta_anual"]}h', align='R')
+    pdf.set_y(-15)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 10, f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")} - Seguimiento Actividad Precursores Alameda Del Rio', align='C')
+
+    buf = BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    filename = f'reporte_{nombre.replace(" ", "_")}_{serv_inicio+1}.pdf'
+    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=filename)
 
 
 @app.route('/reporte/<nombre>/pdf')
