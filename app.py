@@ -832,51 +832,91 @@ def reporte_pdf(nombre):
 def reporte_anual():
     rows = cargar_datos()
     precursores = obtener_precursores(rows)
-    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
+    prec_meta_rows = cargar_precursores_meta()
+    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in prec_meta_rows}
 
-    anio_servicio = 2026
+    # Determinar el año de servicio actual: el start year es 2025 para el ciclo Sep 2025 - Aug 2026
+    # servicio_anio_inicio(anio, mes) retorna 2025 para todo el ciclo actual
+    anio_servicio_start = 2025
 
-    cumplieron = []
-    umbral = []
-    no_cumplieron = []
+    # Cargar todos los precursores registrados (incluyendo los sin datos aún)
+    todos_los_precursores = sorted(set(precursores.keys()) | {p['nombre'] for p in prec_meta_rows})
 
-    for nom, regs in precursores.items():
-        regs_anio = [r for r in regs if servicio_anio_inicio(r['anio'], r['mes']) == anio_servicio]
-        if not regs_anio:
-            continue
+    cumplieron = []      # 600+ horas
+    umbral = []         # 560-599 horas
+    no_cumplieron = []  # >0 y <560 horas (tiene algunos datos)
+    sin_registros = []  # 0 horas (nuevo o sin reportes)
+
+    for nom in todos_los_precursores:
+        regs = precursores.get(nom, [])
+        # Filtrar registros del año de servicio actual (ciclo Sep-Ago)
+        regs_anio = [r for r in regs if servicio_anio_inicio(r['anio'], r['mes']) == anio_servicio_start]
 
         total_horas = sum(r['total_mes'] for r in regs_anio)
         meses_completados = len(regs_anio)
-        promedio = round(total_horas / meses_completados, 1) if meses_completados > 0 else 0
-
-        entry = {
-            'nombre': nom,
-            'total_horas': total_horas,
-            'meta_anual': META_ANUAL,
-            'progreso_pct': round((total_horas / META_ANUAL) * 100, 1),
-            'promedio_mensual': promedio,
-            'meses_completados': meses_completados,
-            'fecha_nombramiento': prec_meta.get(nom, ''),
-            'anios_nombramiento': calcular_anios_nombramiento(prec_meta.get(nom, '')),
-            'faltante': META_ANUAL - total_horas,
-        }
+        fecha_nombramiento = prec_meta.get(nom, '')
+        anios_nombramiento = calcular_anios_nombramiento(fecha_nombramiento) if fecha_nombramiento else None
 
         if total_horas >= META_ANUAL:
-            cumplieron.append(entry)
+            cumplieron.append({
+                'nombre': nom,
+                'total_horas': total_horas,
+                'meta_anual': META_ANUAL,
+                'progreso_pct': round((total_horas / META_ANUAL) * 100, 1),
+                'promedio_mensual': round(total_horas / max(meses_completados, 1), 1) if meses_completados > 0 else 0,
+                'meses_completados': meses_completados,
+                'fecha_nombramiento': fecha_nombramiento,
+                'anios_nombramiento': anios_nombramiento,
+                'faltante': 0,
+            })
         elif total_horas >= 560:
-            umbral.append(entry)
+            umbral.append({
+                'nombre': nom,
+                'total_horas': total_horas,
+                'meta_anual': META_ANUAL,
+                'progreso_pct': round((total_horas / META_ANUAL) * 100, 1),
+                'promedio_mensual': round(total_horas / max(meses_completados, 1), 1) if meses_completados > 0 else 0,
+                'meses_completados': meses_completados,
+                'fecha_nombramiento': fecha_nombramiento,
+                'anios_nombramiento': anios_nombramiento,
+                'faltante': META_ANUAL - total_horas,
+            })
+        elif total_horas > 0:
+            no_cumplieron.append({
+                'nombre': nom,
+                'total_horas': total_horas,
+                'meta_anual': META_ANUAL,
+                'progreso_pct': round((total_horas / META_ANUAL) * 100, 1),
+                'promedio_mensual': round(total_horas / max(meses_completados, 1), 1) if meses_completados > 0 else 0,
+                'meses_completados': meses_completados,
+                'fecha_nombramiento': fecha_nombramiento,
+                'anios_nombramiento': anios_nombramiento,
+                'faltante': META_ANUAL - total_horas,
+            })
         else:
-            no_cumplieron.append(entry)
+            sin_registros.append({
+                'nombre': nom,
+                'total_horas': 0,
+                'meta_anual': META_ANUAL,
+                'progreso_pct': 0,
+                'promedio_mensual': 0,
+                'meses_completados': 0,
+                'fecha_nombramiento': fecha_nombramiento,
+                'anios_nombramiento': anios_nombramiento,
+                'faltante': META_ANUAL,
+            })
 
     cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
     umbral.sort(key=lambda x: x['total_horas'], reverse=True)
     no_cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
+    sin_registros.sort(key=lambda x: x['nombre'])
 
     return render_template('reporte_anual.html',
                          cumplieron=cumplieron,
                          umbral=umbral,
                          no_cumplieron=no_cumplieron,
-                         anio_servicio=anio_servicio,
+                         sin_registros=sin_registros,
+                         anio_servicio_start=anio_servicio_start,
                          meta_anual=META_ANUAL,
                          rol=session.get('rol', 'invitado'))
 
