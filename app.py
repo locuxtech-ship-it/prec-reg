@@ -92,7 +92,7 @@ def cargar_datos():
         reader = csv.DictReader(f, delimiter=';')
         for r in reader:
             rows.append({
-                'anio': int(r['A├▒o Servicio']),
+                'anio': int(r['Año Servicio']),
                 'nombre': r['Nombre'].strip(),
                 'mes': r['Mes'].strip(),
                 'horas': int(r['Horas']) if r['Horas'].strip() else 0,
@@ -105,7 +105,7 @@ def cargar_datos():
 def guardar_datos(rows):
     with open(CSV_PATH, 'w', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f, delimiter=';')
-        writer.writerow(['A├▒o Servicio', 'Nombre', 'Mes', 'Horas', 'Servicio Sagrado', 'Total Mes', 'Faltante Mes'])
+        writer.writerow(['Año Servicio', 'Nombre', 'Mes', 'Horas', 'Servicio Sagrado', 'Total Mes', 'Faltante Mes'])
         for r in rows:
             writer.writerow([
                 r['anio'], r['nombre'], r['mes'],
@@ -172,7 +172,7 @@ def login():
             session['rol'] = 'invitado'
             next_page = request.args.get('next', '/')
             return redirect(next_page)
-        error = 'Contrase├▒a incorrecta'
+        error = 'Contraseña incorrecta'
     return render_template('login.html', error=error)
 
 
