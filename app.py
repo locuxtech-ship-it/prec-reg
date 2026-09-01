@@ -831,19 +831,22 @@ def reporte_pdf(nombre):
 @login_required
 def reporte_anual():
     rows = cargar_datos()
-    precursores = obtener_precursores(rows)
+    precursores_data = obtener_precursores(rows)
     prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
+    meta_nombres = {p['nombre'] for p in cargar_precursores_meta()}
 
-    anio_servicio = 2026
+    all_names = sorted(set(list(precursores_data.keys()) + list(meta_nombres)))
+
+    anio_servicio = obtener_servicio_anio_actual(rows) if rows else 2025
 
     cumplieron = []
     umbral = []
     no_cumplieron = []
+    sin_registros = []
 
-    for nom, regs in precursores.items():
+    for nom in all_names:
+        regs = precursores_data.get(nom, [])
         regs_anio = [r for r in regs if servicio_anio_inicio(r['anio'], r['mes']) == anio_servicio]
-        if not regs_anio:
-            continue
 
         total_horas = sum(r['total_mes'] for r in regs_anio)
         meses_completados = len(regs_anio)
@@ -853,7 +856,7 @@ def reporte_anual():
             'nombre': nom,
             'total_horas': total_horas,
             'meta_anual': META_ANUAL,
-            'progreso_pct': round((total_horas / META_ANUAL) * 100, 1),
+            'progreso_pct': round((total_horas / META_ANUAL) * 100, 1) if total_horas > 0 else 0,
             'promedio_mensual': promedio,
             'meses_completados': meses_completados,
             'fecha_nombramiento': prec_meta.get(nom, ''),
@@ -861,7 +864,9 @@ def reporte_anual():
             'faltante': META_ANUAL - total_horas,
         }
 
-        if total_horas >= META_ANUAL:
+        if meses_completados == 0:
+            sin_registros.append(entry)
+        elif total_horas >= META_ANUAL:
             cumplieron.append(entry)
         elif total_horas >= 560:
             umbral.append(entry)
@@ -871,12 +876,16 @@ def reporte_anual():
     cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
     umbral.sort(key=lambda x: x['total_horas'], reverse=True)
     no_cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
+    sin_registros.sort(key=lambda x: x['nombre'])
+
+    anio_display = anio_servicio + 1
 
     return render_template('reporte_anual.html',
                          cumplieron=cumplieron,
                          umbral=umbral,
                          no_cumplieron=no_cumplieron,
-                         anio_servicio=anio_servicio,
+                         sin_registros=sin_registros,
+                         anio_servicio=anio_display,
                          meta_anual=META_ANUAL,
                          rol=session.get('rol', 'invitado'))
 

@@ -73,7 +73,7 @@
 
 <div class="container">
 
-    {% set total_precursores = cumplieron|length + umbral|length + no_cumplieron|length %}
+    {% set total_precursores = cumplieron|length + umbral|length + no_cumplieron|length + sin_registros|length %}
 
     <!-- Summary -->
     <div class="row g-3 mb-4 fade-in">
@@ -206,6 +206,43 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Sin Registros Section (no data) -->
+    {% if sin_registros %}
+    <div class="section-card mb-4 fade-in">
+        <div class="section-header" style="background:#e3f2fd;color:#1565c0;">
+            <i class="bi bi-person-dash-fill fs-5"></i>
+            Sin Registros en este Año de Servicio
+            <span class="badge bg-light text-dark ms-auto">{{ sin_registros|length }} precursor(es)</span>
+        </div>
+        <div class="section-body">
+            {% for p in sin_registros %}
+            <div class="pioneer-row">
+                <div class="pioneer-name">
+                    {{ p.nombre }}
+                    {% if p.fecha_nombramiento %}
+                    <span class="badge bg-light text-muted ms-2" style="font-weight:400;font-size:.7rem;">
+                        <i class="bi bi-calendar-check me-1"></i>{{ p.fecha_nombramiento }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-muted">0</div>
+                    <div class="label">Horas</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-muted">0/12</div>
+                    <div class="label">Meses</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-muted">-</div>
+                    <div class="label">Prom./Mes</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Cumplieron Section (>= 600) -->
     <div class="section-card mb-4 fade-in">
