@@ -56,6 +56,9 @@
             <i class="bi bi-file-earmark-bar-graph me-2"></i>Reporte Anual {{ anio_servicio }}
         </a>
         <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('reporte_anual_pdf') }}" class="btn btn-danger btn-sm" target="_blank" title="Descargar PDF">
+                <i class="bi bi-filetype-pdf me-1"></i>PDF
+            </a>
             <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">
                 <i class="bi bi-arrow-left me-1"></i>Dashboard
             </a>
@@ -103,7 +106,61 @@
         </div>
     </div>
 
-    <!-- Umbral Section (560-599) -->
+    <!-- 1. Cumplieron Section (>= 600) -->
+    <div class="section-card mb-4 fade-in">
+        <div class="section-header" style="background:#e8f5e9;color:#2e7d32;">
+            <i class="bi bi-check-circle-fill fs-5"></i>
+            Cumplieron la Meta (600+ horas)
+            <span class="badge bg-light text-dark ms-auto">{{ cumplieron|length }} precursor(es)</span>
+        </div>
+        <div class="section-body">
+            {% if cumplieron %}
+            {% for p in cumplieron %}
+            <div class="pioneer-row">
+                <div class="pioneer-name">
+                    {{ p.nombre }}
+                    {% if p.fecha_nombramiento %}
+                    <span class="badge bg-light text-muted ms-2" style="font-weight:400;font-size:.7rem;">
+                        <i class="bi bi-calendar-check me-1"></i>{{ p.fecha_nombramiento }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-success">{{ p.total_horas }}</div>
+                    <div class="label">Horas</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-success">{{ p.faltante }}</div>
+                    <div class="label">Faltan</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value">{{ p.meses_completados }}/12</div>
+                    <div class="label">Meses</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value">{{ p.promedio_mensual }}</div>
+                    <div class="label">Prom./Mes</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="progress progress-sm">
+                        <div class="progress-bar bg-success" role="progressbar" style="width:{{ p.progreso_pct if p.progreso_pct <= 100 else 100 }}%"></div>
+                    </div>
+                    <div class="label">{{ p.progreso_pct }}%</div>
+                </div>
+                <a href="{{ url_for('reporte_pdf', nombre=p.nombre) }}" class="btn btn-sm btn-outline-danger ms-2" target="_blank" title="Descargar PDF">
+                    <i class="bi bi-filetype-pdf"></i>
+                </a>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="pioneer-row justify-content-center text-muted py-4">
+                <i class="bi bi-info-circle me-2"></i>Ningún precursor ha alcanzado la meta aún
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 2. Umbral Section (560-599) -->
     {% if umbral %}
     <div class="section-card mb-4 fade-in">
         <div class="section-header" style="background:#fff3e0;color:#e65100;">
@@ -153,7 +210,7 @@
     </div>
     {% endif %}
 
-    <!-- No Cumplieron Section (< 560) -->
+    <!-- 3. No Cumplieron Section (< 560) -->
     <div class="section-card mb-4 fade-in">
         <div class="section-header" style="background:#ffebee;color:#c62828;">
             <i class="bi bi-x-circle-fill fs-5"></i>
@@ -207,7 +264,7 @@
         </div>
     </div>
 
-    <!-- Sin Registros Section (no data) -->
+    <!-- 4. Sin Registros Section (no data) -->
     {% if sin_registros %}
     <div class="section-card mb-4 fade-in">
         <div class="section-header" style="background:#e3f2fd;color:#1565c0;">
@@ -243,60 +300,6 @@
         </div>
     </div>
     {% endif %}
-
-    <!-- Cumplieron Section (>= 600) -->
-    <div class="section-card mb-4 fade-in">
-        <div class="section-header" style="background:#e8f5e9;color:#2e7d32;">
-            <i class="bi bi-check-circle-fill fs-5"></i>
-            Cumplieron la Meta (600+ horas)
-            <span class="badge bg-light text-dark ms-auto">{{ cumplieron|length }} precursor(es)</span>
-        </div>
-        <div class="section-body">
-            {% if cumplieron %}
-            {% for p in cumplieron %}
-            <div class="pioneer-row">
-                <div class="pioneer-name">
-                    {{ p.nombre }}
-                    {% if p.fecha_nombramiento %}
-                    <span class="badge bg-light text-muted ms-2" style="font-weight:400;font-size:.7rem;">
-                        <i class="bi bi-calendar-check me-1"></i>{{ p.fecha_nombramiento }}
-                    </span>
-                    {% endif %}
-                </div>
-                <div class="pioneer-stat">
-                    <div class="value text-success">{{ p.total_horas }}</div>
-                    <div class="label">Horas</div>
-                </div>
-                <div class="pioneer-stat">
-                    <div class="value text-success">{{ p.faltante }}</div>
-                    <div class="label">Faltan</div>
-                </div>
-                <div class="pioneer-stat">
-                    <div class="value">{{ p.meses_completados }}/12</div>
-                    <div class="label">Meses</div>
-                </div>
-                <div class="pioneer-stat">
-                    <div class="value">{{ p.promedio_mensual }}</div>
-                    <div class="label">Prom./Mes</div>
-                </div>
-                <div class="pioneer-stat">
-                    <div class="progress progress-sm">
-                        <div class="progress-bar bg-success" role="progressbar" style="width:{{ p.progreso_pct if p.progreso_pct <= 100 else 100 }}%"></div>
-                    </div>
-                    <div class="label">{{ p.progreso_pct }}%</div>
-                </div>
-                <a href="{{ url_for('reporte_pdf', nombre=p.nombre) }}" class="btn btn-sm btn-outline-danger ms-2" target="_blank" title="Descargar PDF">
-                    <i class="bi bi-filetype-pdf"></i>
-                </a>
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="pioneer-row justify-content-center text-muted py-4">
-                <i class="bi bi-info-circle me-2"></i>Ningún precursor ha alcanzado la meta aún
-            </div>
-            {% endif %}
-        </div>
-    </div>
 
 </div>
 

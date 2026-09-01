@@ -890,5 +890,162 @@ def reporte_anual():
                          rol=session.get('rol', 'invitado'))
 
 
+@app.route('/reporte-anual/pdf')
+@login_required
+def reporte_anual_pdf():
+    rows = cargar_datos()
+    precursores_data = obtener_precursores(rows)
+    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
+    meta_nombres = {p['nombre'] for p in cargar_precursores_meta()}
+    all_names = sorted(set(list(precursores_data.keys()) + list(meta_nombres)))
+    anio_servicio = obtener_servicio_anio_actual(rows) if rows else 2025
+    anio_display = anio_servicio + 1
+
+    cumplieron = []
+    umbral = []
+    no_cumplieron = []
+    sin_registros = []
+
+    for nom in all_names:
+        regs = precursores_data.get(nom, [])
+        regs_anio = [r for r in regs if servicio_anio_inicio(r['anio'], r['mes']) == anio_servicio]
+        total_horas = sum(r['total_mes'] for r in regs_anio)
+        meses_completados = len(regs_anio)
+        promedio = round(total_horas / meses_completados, 1) if meses_completados > 0 else 0
+
+        entry = {
+            'nombre': nom,
+            'total_horas': total_horas,
+            'meta_anual': META_ANUAL,
+            'progreso_pct': round((total_horas / META_ANUAL) * 100, 1) if total_horas > 0 else 0,
+            'promedio_mensual': promedio,
+            'meses_completados': meses_completados,
+            'fecha_nombramiento': prec_meta.get(nom, ''),
+            'anios_nombramiento': calcular_anios_nombramiento(prec_meta.get(nom, '')),
+            'faltante': META_ANUAL - total_horas,
+        }
+
+        if meses_completados == 0:
+            sin_registros.append(entry)
+        elif total_horas >= META_ANUAL:
+            cumplieron.append(entry)
+        elif total_horas >= 560:
+            umbral.append(entry)
+        else:
+            no_cumplieron.append(entry)
+
+    cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
+    umbral.sort(key=lambda x: x['total_horas'], reverse=True)
+    no_cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
+    sin_registros.sort(key=lambda x: x['nombre'])
+
+    total = len(cumplieron) + len(umbral) + len(no_cumplieron) + len(sin_registros)
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    pdf.add_page()
+    pdf.set_fill_color(26, 35, 126)
+    pdf.rect(0, 0, 210, 35, 'F')
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 16)
+    pdf.set_xy(10, 8)
+    pdf.cell(0, 10, f'Reporte Anual {anio_display}', align='C')
+    pdf.set_font('Helvetica', '', 11)
+    pdf.set_xy(10, 20)
+    pdf.cell(0, 8, 'Alameda Del Rio', align='C')
+    pdf.set_font('Helvetica', '', 9)
+    pdf.set_xy(10, 29)
+    pdf.cell(0, 6, f'Meta Anual: {META_ANUAL}h | Año de Servicio {servicio_anio_inicio(rows[0]["anio"], rows[0]["mes"]) if rows else 2025} - {anio_display}', align='C')
+
+    pdf.ln(20)
+
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 8, f'Total Precursores: {total}  |  Con datos: {total - len(sin_registros)}  |  Sin registros: {len(sin_registros)}', align='L')
+    pdf.ln(4)
+    pdf.set_draw_color(200, 200, 200)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+
+    def draw_category(pdf, title, color, entries):
+        if not entries:
+            return
+        r, g, b = [int(c) for c in color.split(',')]
+        pdf.set_fill_color(r, g, b)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(0, 9, f'  {title} ({len(entries)})', border=0, fill=True, align='L')
+        pdf.ln()
+
+        pdf.set_fill_color(26, 35, 126)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 8)
+        col_w = [60, 22, 22, 22, 22, 22]
+        headers = ['Nombre', 'Horas', 'Prom/Mes', 'Meses', 'Faltan', '%']
+        for i, h in enumerate(headers):
+            pdf.cell(col_w[i], 7, h, border=1, fill=True, align='C')
+        pdf.ln()
+
+        for idx, p in enumerate(entries):
+            if idx % 2 == 0:
+                pdf.set_fill_color(245, 245, 250)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+
+            pdf.set_text_color(50, 50, 50)
+            pdf.set_font('Helvetica', '', 8)
+
+            name_display = p['nombre']
+            if p.get('fecha_nombramiento'):
+                name_display += f' ({p["fecha_nombramiento"]})'
+            if len(name_display) > 35:
+                name_display = name_display[:33] + '..'
+
+            pdf.cell(col_w[0], 6, name_display, border=1, align='L', fill=True)
+            pdf.cell(col_w[1], 6, str(p['total_horas']), border=1, align='C', fill=True)
+            pdf.cell(col_w[2], 6, str(p['promedio_mensual']), border=1, align='C', fill=True)
+            pdf.cell(col_w[3], 6, f"{p['meses_completados']}/12", border=1, align='C', fill=True)
+            pdf.cell(col_w[4], 6, str(p['faltante']) if p['faltante'] > 0 else '0', border=1, align='C', fill=True)
+
+            pdf.set_font('Helvetica', 'B', 8)
+            if p['progreso_pct'] >= 100:
+                pdf.set_text_color(46, 125, 50)
+            elif p['progreso_pct'] >= 90:
+                pdf.set_text_color(245, 124, 0)
+            else:
+                pdf.set_text_color(198, 40, 40)
+            pdf.cell(col_w[5], 6, f"{p['progreso_pct']}%", border=1, align='C', fill=True)
+            pdf.ln()
+
+        pdf.ln(4)
+
+    draw_category(pdf, 'Cumplieron la Meta (600+ horas)', '46,125,50', cumplieron)
+
+    if pdf.get_y() > 240:
+        pdf.add_page()
+    draw_category(pdf, 'Umbral - Cerca de la Meta (560 - 599 horas)', '245,124,0', umbral)
+
+    if pdf.get_y() > 240:
+        pdf.add_page()
+    draw_category(pdf, 'No Cumplieron la Meta (< 560 horas)', '198,40,40', no_cumplieron)
+
+    if sin_registros:
+        if pdf.get_y() > 240:
+            pdf.add_page()
+        draw_category(pdf, 'Sin Registros en este Ano de Servicio', '21,101,192', sin_registros)
+
+    pdf.set_y(-15)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 10, f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")} - Seguimiento Actividad Precursores Alameda Del Rio', align='C')
+
+    buf = BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    filename = f'reporte_anual_{anio_display}.pdf'
+    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
