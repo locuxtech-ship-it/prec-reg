@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <title>Dar de Baja - {{ nombre }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background: #f0f2f5; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .navbar { background: linear-gradient(135deg, #c62828, #d32f2f) !important; }
+        .form-card { border-radius: 16px; border: none; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark mb-4">
+    <div class="container">
+        <a href="{{ url_for('index') }}" class="navbar-brand">
+            <i class="bi bi-person-dash me-2"></i>Dar de Baja
+        </a>
+    </div>
+</nav>
+
+<div class="container" style="max-width:600px;">
+    <div class="card form-card">
+        <div class="card-body p-4">
+            <h4 class="mb-1">{{ nombre }}</h4>
+            {% if registro %}
+            <p class="text-muted small mb-3">
+                Nombramiento: {{ registro.fecha_nombramiento or 'Sin fecha' }} |
+                Estado actual: <span class="badge {% if registro.estado == 'Baja' %}bg-secondary{% else %}bg-success{% endif %}">{{ registro.estado }}</span>
+            </p>
+            {% endif %}
+
+            {% if registro and registro.estado == 'Baja' %}
+            <div class="alert alert-secondary">
+                <strong>Este precursor ya fue dado de baja.</strong><br>
+                Fecha: {{ registro.fecha_baja }}<br>
+                Motivo: {{ registro.motivo_baja or 'No especificado' }}
+            </div>
+            <form method="POST" action="{{ url_for('reactivar_precursor', nombre=nombre) }}">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Reactivar Precursor
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>
+            </form>
+            {% else %}
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Fecha de Baja</label>
+                    <input type="date" name="fecha_baja" class="form-control" value="{{ fecha_actual }}">
+                    <small class="text-muted">Si no se especifica, se usa la fecha de hoy.</small>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Motivo de la Baja</label>
+                    <textarea name="motivo_baja" class="form-control" rows="3" placeholder="Ej: No cumplió la meta anual de 600 horas..."></textarea>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-person-dash me-1"></i>Dar de Baja
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

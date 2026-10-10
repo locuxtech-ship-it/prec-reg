@@ -186,8 +186,13 @@
                 </thead>
                 <tbody>
                     {% for p in precursores %}
-                    <tr class="pioneer-row" data-nombre="{{ p.nombre | lower }}">
-                        <td class="fw-semibold">{{ p.nombre }}</td>
+                    <tr class="pioneer-row {% if p.estado == 'Baja' %}table-secondary{% endif %}" data-nombre="{{ p.nombre | lower }}">
+                        <td class="fw-semibold">
+                            {{ p.nombre }}
+                            {% if p.estado == 'Baja' %}
+                            <span class="badge bg-secondary ms-1" title="Fecha de baja: {{ p.fecha_baja }} | Motivo: {{ p.motivo_baja }}">Baja</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if p.fecha_nombramiento %}
                             <span class="small" title="Nombramiento: {{ p.fecha_nombramiento }}">
@@ -247,6 +252,17 @@
                                 <a href="{{ url_for('generar_token_precursor', nombre=p.nombre) }}" class="btn btn-sm {% if p.tiene_token %}btn-success{% else %}btn-outline-success{% endif %}" title="Generar link de acceso">
                                     <i class="bi bi-link-45deg"></i>
                                 </a>
+                                {% if p.estado == 'Baja' %}
+                                <form method="POST" action="{{ url_for('reactivar_precursor', nombre=p.nombre) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Reactivar precursor">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <a href="{{ url_for('dar_baja_precursor', nombre=p.nombre) }}" class="btn btn-sm btn-outline-warning" title="Dar de baja">
+                                    <i class="bi bi-person-dash"></i>
+                                </a>
+                                {% endif %}
                                 {% endif %}
                                 <a href="{{ url_for('reporte_pdf', nombre=p.nombre) }}" class="btn btn-sm btn-outline-danger" title="Descargar PDF" target="_blank">
                                     <i class="bi bi-filetype-pdf"></i>

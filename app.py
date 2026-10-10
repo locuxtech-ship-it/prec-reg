@@ -53,15 +53,19 @@ def cargar_precursores_meta():
                 'nombre': r['Nombre'].strip(),
                 'fecha_nombramiento': r.get('FechaNombramiento', '').strip(),
                 'token': r.get('Token', '').strip(),
+                'estado': r.get('Estado', 'Activo').strip() or 'Activo',
+                'fecha_baja': r.get('FechaBaja', '').strip(),
+                'motivo_baja': r.get('MotivoBaja', '').strip(),
             })
     return rows
 
 def guardar_precursores_meta(rows):
     with open(PRECURSORES_CSV, 'w', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f, delimiter=';')
-        writer.writerow(['Nombre', 'FechaNombramiento', 'Token'])
+        writer.writerow(['Nombre', 'FechaNombramiento', 'Token', 'Estado', 'FechaBaja', 'MotivoBaja'])
         for r in rows:
-            writer.writerow([r['nombre'], r['fecha_nombramiento'], r.get('token', '')])
+            writer.writerow([r['nombre'], r['fecha_nombramiento'], r.get('token', ''),
+                            r.get('estado', 'Activo'), r.get('fecha_baja', ''), r.get('motivo_baja', '')])
 
 def generar_token():
     return secrets.token_urlsafe(16)
@@ -192,6 +196,7 @@ def index():
     prec_meta_rows = cargar_precursores_meta()
     prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in prec_meta_rows}
     prec_tokens = {p['nombre']: p['token'] for p in prec_meta_rows}
+    prec_estado = {p['nombre']: p for p in prec_meta_rows}
 
     resumen_global = []
     for nom in nombres:
@@ -219,6 +224,9 @@ def index():
             'ultimo_mes': ult_reg['mes'] if ult_reg else '',
             'ultimo_total': ult_reg['total_mes'] if ult_reg else 0,
             'tiene_token': bool(prec_tokens.get(nom, '')),
+            'estado': prec_estado.get(nom, {}).get('estado', 'Activo'),
+            'fecha_baja': prec_estado.get(nom, {}).get('fecha_baja', ''),
+            'motivo_baja': prec_estado.get(nom, {}).get('motivo_baja', ''),
         })
 
     resumen_global.sort(key=lambda x: x['progreso_pct'], reverse=True)
@@ -436,6 +444,47 @@ def editar_fecha_precursor(nombre):
     return render_template('nuevo_precursor.html',
                          editando_nombre=nombre,
                          fecha_actual=registro['fecha_nombramiento'] if registro else '')
+
+
+@app.route('/precursor/<nombre>/dar-baja', methods=['GET', 'POST'])
+@admin_required
+def dar_baja_precursor(nombre):
+    meta_rows = cargar_precursores_meta()
+    registro = None
+    for r in meta_rows:
+        if r['nombre'] == nombre:
+            registro = r
+            break
+
+    if not registro:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        fecha_baja = request.form.get('fecha_baja', '').strip()
+        motivo_baja = request.form.get('motivo_baja', '').strip()
+        if not fecha_baja:
+            fecha_baja = datetime.now().strftime('%Y-%m-%d')
+        registro['estado'] = 'Baja'
+        registro['fecha_baja'] = fecha_baja
+        registro['motivo_baja'] = motivo_baja
+        guardar_precursores_meta(meta_rows)
+        return redirect(url_for('index'))
+
+    return render_template('dar_baja.html', nombre=nombre, registro=registro)
+
+
+@app.route('/precursor/<nombre>/reactivar', methods=['POST'])
+@admin_required
+def reactivar_precursor(nombre):
+    meta_rows = cargar_precursores_meta()
+    for r in meta_rows:
+        if r['nombre'] == nombre:
+            r['estado'] = 'Activo'
+            r['fecha_baja'] = ''
+            r['motivo_baja'] = ''
+            break
+    guardar_precursores_meta(meta_rows)
+    return redirect(url_for('index'))
 
 
 @app.route('/precursor/<nombre>/generar-token')
@@ -832,8 +881,10 @@ def reporte_pdf(nombre):
 def reporte_anual():
     rows = cargar_datos()
     precursores_data = obtener_precursores(rows)
-    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
-    meta_nombres = {p['nombre'] for p in cargar_precursores_meta()}
+    prec_meta_rows = cargar_precursores_meta()
+    prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in prec_meta_rows}
+    meta_nombres = {p['nombre'] for p in prec_meta_rows}
+    prec_estado = {p['nombre']: p for p in prec_meta_rows}
 
     all_names = sorted(set(list(precursores_data.keys()) + list(meta_nombres)))
 
@@ -843,8 +894,11 @@ def reporte_anual():
     umbral = []
     no_cumplieron = []
     sin_registros = []
+    bajas = []
 
     for nom in all_names:
+        info = prec_estado.get(nom, {})
+        estado = info.get('estado', 'Activo')
         regs = precursores_data.get(nom, [])
         regs_anio = [r for r in regs if servicio_anio_inicio(r['anio'], r['mes']) == anio_servicio]
 
@@ -862,9 +916,14 @@ def reporte_anual():
             'fecha_nombramiento': prec_meta.get(nom, ''),
             'anios_nombramiento': calcular_anios_nombramiento(prec_meta.get(nom, '')),
             'faltante': META_ANUAL - total_horas,
+            'estado': estado,
+            'fecha_baja': info.get('fecha_baja', ''),
+            'motivo_baja': info.get('motivo_baja', ''),
         }
 
-        if meses_completados == 0:
+        if estado == 'Baja':
+            bajas.append(entry)
+        elif meses_completados == 0:
             sin_registros.append(entry)
         elif total_horas >= META_ANUAL:
             cumplieron.append(entry)
@@ -877,6 +936,7 @@ def reporte_anual():
     umbral.sort(key=lambda x: x['total_horas'], reverse=True)
     no_cumplieron.sort(key=lambda x: x['total_horas'], reverse=True)
     sin_registros.sort(key=lambda x: x['nombre'])
+    bajas.sort(key=lambda x: x['nombre'])
 
     anio_display = anio_servicio + 1
 
@@ -885,6 +945,7 @@ def reporte_anual():
                          umbral=umbral,
                          no_cumplieron=no_cumplieron,
                          sin_registros=sin_registros,
+                         bajas=bajas,
                          anio_servicio=anio_display,
                          meta_anual=META_ANUAL,
                          rol=session.get('rol', 'invitado'))

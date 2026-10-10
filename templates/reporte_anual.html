@@ -301,6 +301,46 @@
     </div>
     {% endif %}
 
+    <!-- 5. Bajas Section (historial) -->
+    {% if bajas %}
+    <div class="section-card mb-4 fade-in">
+        <div class="section-header" style="background:#eceff1;color:#546e7a;">
+            <i class="bi bi-person-x-fill fs-5"></i>
+            Bajas en este Año de Servicio (Historial)
+            <span class="badge bg-light text-dark ms-auto">{{ bajas|length }} precursor(es)</span>
+        </div>
+        <div class="section-body">
+            {% for p in bajas %}
+            <div class="pioneer-row">
+                <div class="pioneer-name">
+                    {{ p.nombre }}
+                    {% if p.fecha_nombramiento %}
+                    <span class="badge bg-light text-muted ms-2" style="font-weight:400;font-size:.7rem;">
+                        <i class="bi bi-calendar-check me-1"></i>{{ p.fecha_nombramiento }}
+                    </span>
+                    {% endif %}
+                    <br>
+                    <small class="text-muted">
+                        <i class="bi bi-calendar-x me-1"></i>Baja: {{ p.fecha_baja or 'Sin fecha' }}
+                        {% if p.motivo_baja %}
+                        | <i class="bi bi-chat-left-text me-1"></i>{{ p.motivo_baja }}
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-muted">{{ p.total_horas }}</div>
+                    <div class="label">Horas</div>
+                </div>
+                <div class="pioneer-stat">
+                    <div class="value text-muted">{{ p.meses_completados }}/12</div>
+                    <div class="label">Meses</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

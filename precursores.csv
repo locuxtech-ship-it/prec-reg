@@ -1,6 +1,6 @@
-﻿Nombre;FechaNombramiento;Token
-Jonattan Acosta;2026-04-01;
-Maria Linares;2000-03-01;
-Myrtha Rosado linares;2024-05-01;
-Nancy linares;2000-06-01;
-Oliver Gomez;2025-01-01;GQjFXIGZPHiQKUMY2cncbg
+﻿Nombre;FechaNombramiento;Token;Estado;FechaBaja;MotivoBaja
+Jonattan Acosta;2026-04-01;;Activo;;
+Maria Linares;2000-03-01;;Activo;;
+Myrtha Rosado linares;2024-05-01;;Activo;;
+Nancy linares;2000-06-01;;Activo;;
+Oliver Gomez;2025-01-01;GQjFXIGZPHiQKUMY2cncbg;Activo;;
