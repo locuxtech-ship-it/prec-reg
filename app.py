@@ -119,7 +119,11 @@ def guardar_datos(rows):
             ])
 
 def determinar_anio_servicio(mes):
-    return 2026 if mes in ('Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto') else 2025
+    hoy = datetime.now()
+    if mes in ('Septiembre', 'Octubre', 'Noviembre', 'Diciembre'):
+        return hoy.year if hoy.month >= 9 else hoy.year - 1
+    else:
+        return hoy.year if hoy.month <= 8 else hoy.year + 1
 
 def servicio_anio_inicio(anio, mes):
     if mes in ('Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto'):
@@ -137,7 +141,8 @@ def obtener_precursores(rows):
 
 def obtener_servicio_anio_actual(registros):
     if not registros:
-        return 2025
+        hoy = datetime.now()
+        return hoy.year if hoy.month >= 9 else hoy.year - 1
     return max(servicio_anio_inicio(r['anio'], r['mes']) for r in registros)
 
 def calcular_progreso_anual(registros, servicio_anio_inicio_val):
@@ -888,7 +893,17 @@ def reporte_anual():
 
     all_names = sorted(set(list(precursores_data.keys()) + list(meta_nombres)))
 
-    anio_servicio = obtener_servicio_anio_actual(rows) if rows else 2025
+    anios_disponibles = sorted({servicio_anio_inicio(r['anio'], r['mes']) for r in rows}) if rows else []
+    anio_actual = obtener_servicio_anio_actual(rows) if rows else 2025
+    if anio_actual not in anios_disponibles:
+        anios_disponibles.append(anio_actual)
+        anios_disponibles.sort()
+
+    anio_param = request.args.get('anio', type=int)
+    if anio_param and anio_param in anios_disponibles:
+        anio_servicio = anio_param
+    else:
+        anio_servicio = anio_actual
 
     cumplieron = []
     umbral = []
@@ -947,6 +962,8 @@ def reporte_anual():
                          sin_registros=sin_registros,
                          bajas=bajas,
                          anio_servicio=anio_display,
+                         anio_actual_display=anio_actual + 1,
+                         anios_disponibles=[a + 1 for a in anios_disponibles],
                          meta_anual=META_ANUAL,
                          rol=session.get('rol', 'invitado'))
 
@@ -959,7 +976,9 @@ def reporte_anual_pdf():
     prec_meta = {p['nombre']: p['fecha_nombramiento'] for p in cargar_precursores_meta()}
     meta_nombres = {p['nombre'] for p in cargar_precursores_meta()}
     all_names = sorted(set(list(precursores_data.keys()) + list(meta_nombres)))
-    anio_servicio = obtener_servicio_anio_actual(rows) if rows else 2025
+    anio_actual = obtener_servicio_anio_actual(rows) if rows else 2025
+    anio_param = request.args.get('anio', type=int)
+    anio_servicio = anio_param if (anio_param and anio_param in {servicio_anio_inicio(r['anio'], r['mes']) for r in rows}) else anio_actual
     anio_display = anio_servicio + 1
 
     cumplieron = []

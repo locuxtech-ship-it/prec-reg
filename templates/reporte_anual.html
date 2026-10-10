@@ -56,7 +56,15 @@
             <i class="bi bi-file-earmark-bar-graph me-2"></i>Reporte Anual {{ anio_servicio }}
         </a>
         <div class="d-flex align-items-center gap-2">
-            <a href="{{ url_for('reporte_anual_pdf') }}" class="btn btn-danger btn-sm" target="_blank" title="Descargar PDF">
+            <form method="GET" action="{{ url_for('reporte_anual') }}" class="d-flex align-items-center gap-2">
+                <label class="text-light small mb-0">Año:</label>
+                <select name="anio" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                    {% for a in anios_disponibles %}
+                    <option value="{{ a }}" {% if a == anio_servicio %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <a href="{{ url_for('reporte_anual_pdf', anio=anio_actual_display) }}" class="btn btn-danger btn-sm" target="_blank" title="Descargar PDF">
                 <i class="bi bi-filetype-pdf me-1"></i>PDF
             </a>
             <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">
